@@ -1,18 +1,16 @@
-# Synthetic Fixtures
+# 合成测试素材
 
-Tests for `wuwa-pak` must use synthetic fixtures by default.
+`wuwa-pak` 的测试默认必须使用合成测试素材。
 
-Do not copy real game Pak files, extracted game files, real SQLite databases,
-real encrypted payloads, captured metadata, or real AES keys into this directory.
+不要把真实游戏 Pak、真实解包文件、真实 SQLite 数据库、真实加密载荷、抓取的元数据或真实 AES key 复制到这个目录。
 
-Fixture rules:
+测试素材规则：
 
-- Generate tiny binary blobs specifically for parser tests.
-- Use fake paths such as `Content/Fake/Data/example.txt`.
-- Use deterministic test-only AES keys such as all-zero bytes.
-- Keep payloads small and human-reviewable.
-- Prefer checked-in generator code over opaque binary blobs.
-- Never copy bytes from real game files into fixtures.
+- 只为解析器测试生成很小的二进制 blob。
+- 使用 `Content/Fake/Data/example.txt` 这类假路径。
+- 使用确定性的测试专用 AES key，例如全零字节。
+- 保持载荷小且便于人工审查。
+- 优先提交生成脚本，而不是不透明的二进制 blob。
+- 不要从真实游戏文件复制任何字节到测试素材。
 
-`generate_fixtures.py` contains helpers for building minimal byte sequences used
-by unit tests. It intentionally does not generate real Pak archives.
+`generate_fixtures.py` 包含构造单元测试所需最小字节序列的辅助函数。它不会生成真实 Pak 归档。
