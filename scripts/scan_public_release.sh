@@ -21,7 +21,15 @@ while IFS= read -r file; do
       failed=1
     fi
   done < "$denylist"
-done < <(rg --files "$target")
+done < <(rg --files --hidden \
+  --glob '!**/.git/**' \
+  --glob '!**/.venv/**' \
+  --glob '!**/__pycache__/**' \
+  --glob '!**/.ruff_cache/**' \
+  --glob '!**/.pytest_cache/**' \
+  --glob '!**/build/**' \
+  --glob '!**/dist/**' \
+  "$target")
 
 while IFS= read -r file; do
   [ -f "$file" ] || continue
@@ -40,7 +48,15 @@ while IFS= read -r file; do
       failed=1
     fi
   done < "$terms"
-done < <(rg --files "$target")
+done < <(rg --files --hidden \
+  --glob '!**/.git/**' \
+  --glob '!**/.venv/**' \
+  --glob '!**/__pycache__/**' \
+  --glob '!**/.ruff_cache/**' \
+  --glob '!**/.pytest_cache/**' \
+  --glob '!**/build/**' \
+  --glob '!**/dist/**' \
+  "$target")
 
 if [ "$failed" -ne 0 ]; then
   exit 1
