@@ -1,0 +1,16 @@
+# Relative path globs that must never appear in public-bound paths.
+# Blank lines and comments are ignored.
+data/pak_keys.json
+*/pak_keys.json
+logs/*
+data/pak_extracted/*
+*.db
+*/*.db
+*.trace
+*/*.trace
+*_keydump.*
+*/*_keydump.*
+*spawn*
+*/*spawn*
+*attach*
+*/*attach*

@@ -1,0 +1,30 @@
+wuwa-pak
+Copyright 2026 lyqgzbl
+
+Licensed under the Apache License, Version 2.0.
+
+This product includes software behavior implemented with reference to CUE4Parse,
+an Unreal Engine archive and package parsing library.
+
+  CUE4Parse
+  Copyright CUE4Parse contributors
+  https://github.com/FabianFG/CUE4Parse
+  Licensed under the Apache License, Version 2.0
+
+Relationship to CUE4Parse:
+
+  wuwa-pak is an independent Python implementation. It does not include
+  CUE4Parse C# source files verbatim, but parts of its Wuthering Waves Pak entry
+  decoding and partial encryption behavior were implemented with reference to
+  CUE4Parse's Apache-2.0 licensed implementation.
+
+  The referenced upstream behavior includes Wuthering Waves Pak entry bitfield
+  decoding, the custom entry byte, offset/uncompressed-size swapping, and partial
+  encryption length handling.
+
+Apache-2.0 inheritance and redistribution notes:
+
+  This NOTICE is intended to preserve attribution for the referenced CUE4Parse
+  work. The Apache License, Version 2.0 text is provided in LICENSE. If this
+  package is redistributed as source or binary artifacts, include both LICENSE
+  and NOTICE with the distribution.
