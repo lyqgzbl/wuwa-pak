@@ -13,6 +13,7 @@ from __future__ import annotations
 import struct
 import zlib
 from dataclasses import dataclass
+from math import isinf
 from pathlib import Path
 from typing import BinaryIO
 
@@ -155,10 +156,15 @@ def _extract_entry(
     if entry.compression_method == 0:
         data_offset = entry.offset + entry.struct_size
         size = entry.uncompressed_size
-        file.seek(data_offset)
-        raw = file.read(size)
+        read_size = size
+        encrypted_length = 0
         if entry.encrypted and limit > 0:
-            encrypted_length = align16(min(int(limit), size))
+            limited_size = size if isinf(limit) else min(int(limit), size)
+            encrypted_length = align16(limited_size)
+            read_size = max(size, encrypted_length)
+        file.seek(data_offset)
+        raw = file.read(read_size)
+        if encrypted_length > 0:
             decrypted = _decrypt(raw[:encrypted_length], key)
             raw = decrypted[: min(encrypted_length, size)] + raw[encrypted_length:]
         return raw[:size]
@@ -169,7 +175,7 @@ def _extract_entry(
         else "Zlib"
     )
     result = bytearray()
-    remaining_limit = limit
+    remaining_limit = None if isinf(limit) else int(limit)
 
     for block_start, block_end in entry.blocks:
         block_size = block_end - block_start
@@ -178,12 +184,20 @@ def _extract_entry(
             entry.uncompressed_size - len(result),
         )
 
-        if remaining_limit >= block_size and entry.encrypted:
+        if remaining_limit is None and entry.encrypted:
+            read_size = align16(block_size)
+            file.seek(block_start)
+            raw = _decrypt(file.read(read_size), key)[:block_size]
+        elif (
+            remaining_limit is not None
+            and remaining_limit >= block_size
+            and entry.encrypted
+        ):
             read_size = align16(block_size)
             file.seek(block_start)
             raw = _decrypt(file.read(read_size), key)[:block_size]
             remaining_limit -= read_size
-        elif remaining_limit > 0 and entry.encrypted:
+        elif remaining_limit is not None and remaining_limit > 0 and entry.encrypted:
             encrypted_part_size = int(remaining_limit)
             file.seek(block_start)
             decrypted = _decrypt(file.read(encrypted_part_size), key)[
