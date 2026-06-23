@@ -32,6 +32,15 @@ class PakArchive:
 
     @classmethod
     def open(cls, pak_path: str | Path, key_hex: str) -> PakArchive:
+        """Open a Pak archive and parse its index.
+
+        Args:
+            pak_path: Path to the Pak file.
+            key_hex: AES key as a hex string.
+
+        Returns:
+            The parsed PakArchive instance.
+        """
         path = Path(pak_path)
         key = key_from_hex(key_hex)
         with path.open("rb") as file:
@@ -42,6 +51,14 @@ class PakArchive:
         return cls(path=path, footer=footer, entries=entries, key=key)
 
     def extract_entry(self, entry: PakEntry) -> bytes:
+        """Extract the uncompressed data for a specific entry.
+
+        Args:
+            entry: The PakEntry to extract.
+
+        Returns:
+            Uncompressed file data.
+        """
         with self.path.open("rb") as file:
             return _extract_entry(
                 file,
@@ -224,6 +241,14 @@ def _extract_entry(
 
 
 def public_entry_name(name: str) -> str:
+    """Strip Unreal Engine mount points to return a clean relative path.
+
+    Args:
+        name: Raw entry name from the Pak index.
+
+    Returns:
+        Cleaned relative file path.
+    """
     rel = name
     for prefix in (
         "../../../Client/Content/Aki/",

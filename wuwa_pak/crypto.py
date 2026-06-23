@@ -6,6 +6,7 @@ from Crypto.Cipher import AES
 
 
 def key_from_hex(key_hex: str) -> bytes:
+    """Parse an AES key from a hex string."""
     normalized = key_hex.strip().removeprefix("0x").replace(" ", "")
     key = bytes.fromhex(normalized)
     if len(key) != 32:
@@ -14,6 +15,7 @@ def key_from_hex(key_hex: str) -> bytes:
 
 
 def decrypt_aes_ecb(data: bytes, key: bytes) -> bytes:
+    """Decrypt data using AES-256 in ECB mode with zero padding."""
     pad = (16 - len(data) % 16) % 16
     cipher = AES.new(key, AES.MODE_ECB)
     return cipher.decrypt(data + b"\x00" * pad)[: len(data)]

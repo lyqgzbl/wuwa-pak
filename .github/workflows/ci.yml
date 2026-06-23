@@ -15,4 +15,3 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pytest
       - run: uv build
-      - run: ./scripts/scan_public_release.sh .

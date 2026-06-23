@@ -10,6 +10,15 @@ def align16(value: int) -> int:
 
 
 def read_fstring(data: bytes, pos: int) -> tuple[str, int]:
+    """Read an Unreal Engine FString from binary data.
+
+    Args:
+        data: The raw binary data.
+        pos: Offset to start reading.
+
+    Returns:
+        A tuple containing the decoded string and the new offset.
+    """
     length = struct.unpack_from("<i", data, pos)[0]
     pos += 4
     if length == 0:

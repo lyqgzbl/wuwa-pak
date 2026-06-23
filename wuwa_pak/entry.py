@@ -34,6 +34,17 @@ def decode_entry(
     version: int,
     name: str = "",
 ) -> tuple[PakEntry, int]:
+    """Decode a single Pak entry from the encoded index.
+
+    Args:
+        data: The raw binary data of the encoded index.
+        offset: Offset within the data to start decoding.
+        version: Pak format version.
+        name: Filename of the entry (optional).
+
+    Returns:
+        A tuple containing the decoded PakEntry and the new offset.
+    """
     pos = offset
     bitfield = struct.unpack_from("<I", data, pos)[0]
     pos += 4
@@ -126,6 +137,14 @@ def decode_entry(
 
 
 def wuwa_encryption_limit(custom_data: int) -> float:
+    """Determine the encryption limit based on Wuthering Waves custom data flags.
+
+    Args:
+        custom_data: The custom data flag from the Pak entry.
+
+    Returns:
+        The maximum number of bytes to decrypt (or infinity if fully encrypted).
+    """
     if custom_data == 0:
         return float("inf")
     if custom_data == 1:
