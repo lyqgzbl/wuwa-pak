@@ -17,3 +17,8 @@ def test_decrypt_aes_ecb_synthetic_roundtrip() -> None:
     plaintext = b"synthetic-block!"  # 16 bytes
     encrypted = AES.new(TEST_AES_KEY, AES.MODE_ECB).encrypt(plaintext)
     assert decrypt_aes_ecb(encrypted, TEST_AES_KEY) == plaintext
+
+
+def test_decrypt_aes_ecb_rejects_partial_blocks() -> None:
+    with pytest.raises(ValueError, match="multiple of 16"):
+        decrypt_aes_ecb(b"x" * 15, TEST_AES_KEY)

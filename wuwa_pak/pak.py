@@ -14,7 +14,7 @@ import struct
 import zlib
 from dataclasses import dataclass
 from math import isinf
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
 from wuwa_pak.binary import align16, read_fstring
@@ -73,39 +73,54 @@ def _decrypt(data: bytes, key: bytes) -> bytes:
 
 
 def _read_entries(file: BinaryIO, footer: PakFooter, key: bytes) -> list[PakEntry]:
+    index_read_size = (
+        align16(footer.index_size) if footer.encrypted else footer.index_size
+    )
+    file.seek(0, 2)
+    file_size = file.tell()
+    if (
+        footer.index_offset < 0
+        or footer.index_size < 0
+        or footer.index_offset + index_read_size > file_size
+    ):
+        raise ValueError("Pak index points outside the archive")
     file.seek(footer.index_offset)
-    index_raw = file.read(footer.index_size)
+    index_raw = file.read(index_read_size)
+    if len(index_raw) != index_read_size:
+        raise ValueError("Pak index is truncated")
     if footer.encrypted:
-        index_raw = _decrypt(index_raw, key)
+        index_raw = _decrypt(index_raw, key)[: footer.index_size]
 
-    pos = 0
-    mount, pos = read_fstring(index_raw, pos)
-    if pos > len(index_raw) - 4:
-        return []
-
-    file_count = struct.unpack_from("<i", index_raw, pos)[0]
-    pos += 4
-    if file_count <= 0 or file_count > 1_000_000:
-        return []
-    pos += 8
-
-    has_path_hash_index = struct.unpack_from("<i", index_raw, pos)[0]
-    pos += 4
-    if has_path_hash_index:
-        pos += 8 + 8 + 20
-
-    has_full_directory_index = struct.unpack_from("<i", index_raw, pos)[0]
-    pos += 4
-    full_directory_offset = full_directory_size = 0
-    if has_full_directory_index:
-        full_directory_offset = struct.unpack_from("<q", index_raw, pos)[0]
+    try:
+        pos = 0
+        mount, pos = read_fstring(index_raw, pos)
+        file_count = struct.unpack_from("<i", index_raw, pos)[0]
+        pos += 4
+        if file_count <= 0 or file_count > 1_000_000:
+            return []
         pos += 8
-        full_directory_size = struct.unpack_from("<q", index_raw, pos)[0]
-        pos += 8 + 20
 
-    encoded_size = struct.unpack_from("<i", index_raw, pos)[0]
-    pos += 4
-    encoded_entries = index_raw[pos : pos + encoded_size]
+        has_path_hash_index = struct.unpack_from("<i", index_raw, pos)[0]
+        pos += 4
+        if has_path_hash_index:
+            pos += 8 + 8 + 20
+
+        has_full_directory_index = struct.unpack_from("<i", index_raw, pos)[0]
+        pos += 4
+        full_directory_offset = full_directory_size = 0
+        if has_full_directory_index:
+            full_directory_offset = struct.unpack_from("<q", index_raw, pos)[0]
+            pos += 8
+            full_directory_size = struct.unpack_from("<q", index_raw, pos)[0]
+            pos += 8 + 20
+
+        encoded_size = struct.unpack_from("<i", index_raw, pos)[0]
+        pos += 4
+        if encoded_size < 0 or pos + encoded_size > len(index_raw):
+            raise ValueError("invalid encoded Pak entry size")
+        encoded_entries = index_raw[pos : pos + encoded_size]
+    except (IndexError, struct.error, ValueError) as exc:
+        raise ValueError("invalid Pak index") from exc
 
     filenames: dict[int, str] = {}
     if has_full_directory_index and full_directory_size > 0:
@@ -141,24 +156,39 @@ def _read_full_directory_index(
     encrypted: bool,
     key: bytes,
 ) -> dict[int, str]:
+    if offset < 0 or size < 0:
+        raise ValueError("invalid full directory index range")
+    read_size = align16(size) if encrypted else size
+    file.seek(0, 2)
+    if offset + read_size > file.tell():
+        raise ValueError("full directory index points outside the archive")
     file.seek(offset)
-    raw = file.read(size)
+    raw = file.read(read_size)
+    if len(raw) != read_size:
+        raise ValueError("full directory index is truncated")
     if encrypted:
-        raw = _decrypt(raw, key)
+        raw = _decrypt(raw, key)[:size]
 
     filenames: dict[int, str] = {}
-    pos = 0
-    directory_count = struct.unpack_from("<i", raw, pos)[0]
-    pos += 4
-    for _ in range(directory_count):
-        dirname, pos = read_fstring(raw, pos)
-        file_count = struct.unpack_from("<i", raw, pos)[0]
+    try:
+        pos = 0
+        directory_count = struct.unpack_from("<i", raw, pos)[0]
         pos += 4
-        for _ in range(file_count):
-            filename, pos = read_fstring(raw, pos)
-            entry_index = struct.unpack_from("<I", raw, pos)[0]
+        if directory_count < 0 or directory_count > 1_000_000:
+            raise ValueError("invalid full directory count")
+        for _ in range(directory_count):
+            dirname, pos = read_fstring(raw, pos)
+            file_count = struct.unpack_from("<i", raw, pos)[0]
             pos += 4
-            filenames[entry_index] = mount + dirname + filename
+            if file_count < 0 or file_count > 1_000_000:
+                raise ValueError("invalid full directory file count")
+            for _ in range(file_count):
+                filename, pos = read_fstring(raw, pos)
+                entry_index = struct.unpack_from("<I", raw, pos)[0]
+                pos += 4
+                filenames[entry_index] = mount + dirname + filename
+    except (IndexError, struct.error, ValueError) as exc:
+        raise ValueError("invalid full directory index") from exc
     return filenames
 
 
@@ -186,11 +216,11 @@ def _extract_entry(
             raw = decrypted[: min(encrypted_length, size)] + raw[encrypted_length:]
         return raw[:size]
 
-    method_name = (
-        compression_methods[entry.compression_method]
-        if entry.compression_method < len(compression_methods)
-        else "Zlib"
-    )
+    if entry.compression_method >= len(compression_methods):
+        raise ValueError(f"unsupported compression method {entry.compression_method}")
+    method_name = compression_methods[entry.compression_method]
+    if method_name != "Zlib":
+        raise ValueError(f"unsupported compression method {method_name!r}")
     result = bytearray()
     remaining_limit = None if isinf(limit) else int(limit)
 
@@ -216,12 +246,13 @@ def _extract_entry(
             remaining_limit -= read_size
         elif remaining_limit is not None and remaining_limit > 0 and entry.encrypted:
             encrypted_part_size = int(remaining_limit)
+            encrypted_read_size = align16(encrypted_part_size)
             file.seek(block_start)
-            decrypted = _decrypt(file.read(encrypted_part_size), key)[
+            decrypted = _decrypt(file.read(encrypted_read_size), key)[
                 :encrypted_part_size
             ]
-            file.seek(block_start + encrypted_part_size)
-            plain = file.read(block_size - encrypted_part_size)
+            file.seek(block_start + encrypted_read_size)
+            plain = file.read(block_size - encrypted_read_size)
             raw = decrypted + plain
             remaining_limit = 0
         else:
@@ -229,13 +260,10 @@ def _extract_entry(
             raw = file.read(block_size)
 
         try:
-            if method_name == "Zlib":
-                decompressed = zlib.decompress(raw, -15, block_uncompressed)
-            else:
-                decompressed = raw
-            result.extend(decompressed)
-        except zlib.error:
-            result.extend(raw[:block_uncompressed])
+            decompressed = zlib.decompress(raw, -15, block_uncompressed)
+        except zlib.error as exc:
+            raise ValueError("invalid Zlib-compressed Pak block") from exc
+        result.extend(decompressed)
 
     return bytes(result[: entry.uncompressed_size])
 
@@ -249,7 +277,9 @@ def public_entry_name(name: str) -> str:
     Returns:
         Cleaned relative file path.
     """
-    rel = name
+    rel = name.replace("\\", "/")
+    if rel.startswith("/"):
+        raise ValueError(f"unsafe Pak entry path: {name!r}")
     for prefix in (
         "../../../Client/Content/Aki/",
         "../../../Client/Content/",
@@ -260,4 +290,11 @@ def public_entry_name(name: str) -> str:
         if rel.startswith(prefix):
             rel = rel[len(prefix) :]
             break
-    return rel.lstrip("/")
+    path = PurePosixPath(rel)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError(f"unsafe Pak entry path: {name!r}")
+    return path.as_posix()

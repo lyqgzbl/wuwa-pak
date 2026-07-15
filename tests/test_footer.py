@@ -19,3 +19,7 @@ def test_read_footer_returns_none_for_bad_magic() -> None:
     data = bytearray(pak_footer())
     data[17:21] = b"BAD!"
     assert read_footer(BytesIO(bytes(data))) is None
+
+
+def test_read_footer_returns_none_for_truncated_file() -> None:
+    assert read_footer(BytesIO(b"too short")) is None

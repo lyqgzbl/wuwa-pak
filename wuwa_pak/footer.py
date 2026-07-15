@@ -22,8 +22,13 @@ class PakFooter:
 
 def read_footer(file: BinaryIO) -> PakFooter | None:
     """Read and parse the Pak footer from the end of the file."""
+    file.seek(0, 2)
+    if file.tell() < PAK_FOOTER_SIZE:
+        return None
     file.seek(-PAK_FOOTER_SIZE, 2)
     footer = file.read(PAK_FOOTER_SIZE)
+    if len(footer) != PAK_FOOTER_SIZE:
+        return None
     magic = struct.unpack_from("<I", footer, 17)[0]
     if magic != PAK_MAGIC:
         return None

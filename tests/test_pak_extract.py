@@ -82,6 +82,14 @@ def test_public_entry_name() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "name", ["../../outside.txt", "/tmp/outside.txt", "Content/../x"]
+)
+def test_public_entry_name_rejects_unsafe_paths(name: str) -> None:
+    with pytest.raises(ValueError, match="unsafe Pak entry path"):
+        public_entry_name(name)
+
+
 def test_read_full_directory_index() -> None:
     import struct
     # Build a fake directory index buffer
@@ -175,9 +183,11 @@ def test_read_entries() -> None:
         version = 12
 
     # Test _read_entries
-    from wuwa_pak.pak import _read_entries
+    from typing import cast
 
-    entries = _read_entries(file, FakeFooter(), TEST_AES_KEY)
+    from wuwa_pak.pak import PakFooter, _read_entries
+
+    entries = _read_entries(file, cast("PakFooter", FakeFooter()), TEST_AES_KEY)
 
     # decode_entry won't find anything matching since we have no full directory index,
     # so it continues/errors and entries remain []
@@ -231,9 +241,11 @@ def test_read_entries_with_full_dir() -> None:
         encrypted = False
         version = 11
 
-    from wuwa_pak.pak import _read_entries
+    from typing import cast
 
-    entries = _read_entries(file, FakeFooter(), TEST_AES_KEY)
+    from wuwa_pak.pak import PakFooter, _read_entries
+
+    entries = _read_entries(file, cast("PakFooter", FakeFooter()), TEST_AES_KEY)
 
     assert len(entries) == 1
     assert entries[0].name == "../../../Content/data.json"
@@ -249,8 +261,15 @@ def test_extract_entry_method(tmp_path) -> None:
     class FakeFooter:
         compression_methods = ("None",)
 
+    from typing import cast
+
+    from wuwa_pak.pak import PakFooter
+
     archive = PakArchive(
-        path=pak_file, footer=FakeFooter(), entries=[], key=TEST_AES_KEY
+        path=pak_file,
+        footer=cast("PakFooter", FakeFooter()),
+        entries=[],
+        key=TEST_AES_KEY,
     )
 
     entry = PakEntry(
@@ -303,14 +322,11 @@ def test_extract_compressed_encrypted_blocks() -> None:
 
 
 def test_extract_compressed_encrypted_blocks_partial_mocked(monkeypatch) -> None:
-    # Need something that compresses to > 16 bytes. Random bytes.
-    import os
-
-    plaintext1 = os.urandom(1000)
+    plaintext1 = bytes((index * 73 + 19) % 256 for index in range(1000))
     compobj1 = zlib.compressobj(wbits=-15)
     comp1 = compobj1.compress(plaintext1) + compobj1.flush()
 
-    plaintext2 = os.urandom(500)
+    plaintext2 = bytes((index * 41 + 7) % 256 for index in range(500))
     compobj2 = zlib.compressobj(wbits=-15)
     comp2 = compobj2.compress(plaintext2) + compobj2.flush()
 
@@ -351,9 +367,7 @@ def test_extract_compressed_encrypted_blocks_partial_mocked(monkeypatch) -> None
 
 def test_extract_compressed_encrypted_blocks_limit_exact(monkeypatch) -> None:
     # Limit exactly covers block 1
-    import os
-
-    plaintext1 = os.urandom(1000)
+    plaintext1 = bytes((index * 73 + 19) % 256 for index in range(1000))
     compobj1 = zlib.compressobj(wbits=-15)
     comp1 = compobj1.compress(plaintext1) + compobj1.flush()
 
@@ -363,7 +377,7 @@ def test_extract_compressed_encrypted_blocks_limit_exact(monkeypatch) -> None:
     padded_comp1 = comp1 + b"\x00" * (align16(len(comp1)) - len(comp1))
     block1_data = AES.new(TEST_AES_KEY, AES.MODE_ECB).encrypt(padded_comp1)
 
-    plaintext2 = os.urandom(500)
+    plaintext2 = bytes((index * 41 + 7) % 256 for index in range(500))
     compobj2 = zlib.compressobj(wbits=-15)
     comp2 = compobj2.compress(plaintext2) + compobj2.flush()
 
